@@ -3,11 +3,15 @@ import os
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_mistralai import ChatMistralAI
 
+from core.reranker import rerank
 from core.vector_store import build_vector_store, get_retriever, load_vector_store
 from utils.retrying import invoke_chain
+
+
+RETRIEVE_TOP_N = 15
+RERANK_TOP_K = 5
 
 
 def get_llm():
@@ -26,8 +30,7 @@ def _format_docs_with_refs(docs: list[Document]) -> str:
     return "\n\n".join(parts)
 
 
-def _build_chain(vector_store):
-    retriever = get_retriever(vector_store, k=4)
+def _build_answer_chain():
     llm = get_llm()
     prompt = ChatPromptTemplate.from_messages(
         [
@@ -50,17 +53,12 @@ Context from meeting transcript:
             ("human", "{question}"),
         ]
     )
+    return prompt | llm | StrOutputParser()
 
-    answer_chain = (
-        {
-            "context": retriever | RunnableLambda(_format_docs_with_refs),
-            "question": RunnablePassthrough(),
-        }
-        | prompt
-        | llm
-        | StrOutputParser()
-    )
 
+def _build_chain(vector_store):
+    retriever = get_retriever(vector_store, k=RETRIEVE_TOP_N)
+    answer_chain = _build_answer_chain()
     return {"answer": answer_chain, "retriever": retriever}
 
 
@@ -82,8 +80,11 @@ def ask_question(rag_chain, question: str) -> dict:
         }
 
     print(f"Question: {question}")
-    sources = rag_chain["retriever"].invoke(question)
-    answer = invoke_chain(rag_chain["answer"], question)
+    candidates = rag_chain["retriever"].invoke(question)
+    reranked = rerank(question, candidates, top_k=RERANK_TOP_K)
+
+    context = _format_docs_with_refs(reranked)
+    answer = invoke_chain(rag_chain["answer"], {"context": context, "question": question})
     print(f"Answer: {answer}")
 
     return {
@@ -95,6 +96,6 @@ def ask_question(rag_chain, question: str) -> dict:
                 "source": doc.metadata.get("source"),
                 "preview": doc.page_content,
             }
-            for doc in sources
+            for doc in reranked
         ],
     }
