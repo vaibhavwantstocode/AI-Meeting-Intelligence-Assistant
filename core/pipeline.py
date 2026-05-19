@@ -4,6 +4,7 @@ from core.extractor import extract_action_items, extract_key_decisions, extract_
 from core.rag_engine import build_rag_chain
 from core.summarizer import generate_title, summarize
 from core.transcriber import transcribe_all
+from core.vector_store import new_session_id
 from utils.audio_processor import cleanup_audio_artifacts, process_input
 from utils.validation import validate_pipeline_request
 
@@ -37,6 +38,7 @@ def _run_optional_stage(
 
 def run_pipeline(source: str, language: str = "english", callback: PipelineCallback | None = None) -> dict:
     source, language = validate_pipeline_request(source, language)
+    session_id = new_session_id()
     errors: dict[str, str] = {}
     chunks: list[str] = []
 
@@ -91,10 +93,12 @@ def run_pipeline(source: str, language: str = "english", callback: PipelineCallb
             callback,
             errors,
             None,
-            lambda: build_rag_chain(transcript),
+            lambda: build_rag_chain(transcript, session_id=session_id, source=source),
         )
 
         return {
+            "session_id": session_id,
+            "source": source,
             "title": title,
             "transcript": transcript,
             "summary": summary,
