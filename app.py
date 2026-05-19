@@ -204,6 +204,7 @@ if result.get("errors"):
             st.warning(f"{stage}: {error}")
 
 st.header(result["title"])
+st.caption(f"Session: `{result.get('session_id', 'n/a')}`  ·  Source: {result.get('source', 'n/a')}")
 
 summary_col, transcript_col = st.columns([3, 2], gap="large")
 with summary_col:
@@ -230,6 +231,9 @@ else:
     for message in st.session_state.chat_history:
         with st.chat_message(message["role"]):
             st.write(message["content"])
+            for src in message.get("sources", []) or []:
+                with st.expander(f"Source · chunk {src.get('chunk_index')}"):
+                    st.write(src.get("preview", ""))
 
     user_question = st.chat_input("Ask anything about the meeting transcript")
     if user_question:
@@ -238,9 +242,16 @@ else:
             st.write(user_question)
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                answer = ask_question(rag_chain, user_question)
+                response = ask_question(rag_chain, user_question)
+            answer = response["answer"]
+            sources = response.get("sources", [])
             st.write(answer)
-        st.session_state.chat_history.append({"role": "assistant", "content": answer})
+            for src in sources:
+                with st.expander(f"Source · chunk {src.get('chunk_index')}"):
+                    st.write(src.get("preview", ""))
+        st.session_state.chat_history.append(
+            {"role": "assistant", "content": answer, "sources": sources}
+        )
 
     if st.session_state.chat_history and st.button("Clear chat"):
         st.session_state.chat_history = []

@@ -21,6 +21,8 @@ if __name__ == "__main__":
         raise SystemExit(1)
 
     print("\n" + "=" * 60)
+    print(f"Session: {result.get('session_id', 'n/a')}")
+    print(f"Source:  {result.get('source', 'n/a')}")
     print(f"Title: {result['title']}")
     print(f"\nSummary:\n{result['summary']}")
     print(f"\nAction Items:\n{result['action_items']}")
@@ -46,5 +48,11 @@ if __name__ == "__main__":
             break
         if not question:
             continue
-        answer = ask_question(rag_chain, question)
-        print(f"\nAssistant: {answer}\n")
+        response = ask_question(rag_chain, question)
+        print(f"\nAssistant: {response['answer']}")
+        sources = response.get("sources", [])
+        if sources:
+            chunk_refs = ", ".join(f"chunk {s.get('chunk_index')}" for s in sources)
+            print(f"Sources: {chunk_refs}\n")
+        else:
+            print()
